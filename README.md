@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://media.cyberhawkthreatintel.com/general/1771234479938-y9566.png" width="120" alt="CyberHawk Logo"/>
+  <img src="https://media.cyberhawkthreatintel.com/general/1771234479938-y9566.png" width="120" alt="CyberHawk Threat Intel"/>
 
 # onenote-mcp
 
@@ -325,14 +325,18 @@ onenote_sync_project_to_onenote(project_path="D:/my-project")
 
 <div align="center">
 
-**Built by [Rudra Verma](https://github.com/rudraverma) | Senior Security Architect**
+<a href="https://www.cyberhawkthreatintel.com">
+  <img src="https://media.cyberhawkthreatintel.com/general/1771234479938-y9566.png" alt="CyberHawk Threat Intel" width="80"/>
+</a>
 
-[CyberHawk Consultancy](https://cyberhawkthreatintel.com) · [Web App](https://app.cyberhawkthreatintel.com)
+**[CyberHawk Threat Intel](https://www.cyberhawkthreatintel.com)**
 
-[YouTube](https://youtube.com/@cyberhawkconsultancy) · [TikTok](https://tiktok.com/@cyberhawkthreatintel) · [X](https://x.com/cyberhawkintel) · [Telegram](https://t.me/cyberhawkthreatintel)
+*Rudra Verma | Senior Cyber Security Architect & Researcher | CyberHawk Threat Intel*
+
+[YouTube @cyberhawkconsultancy](https://youtube.com/@cyberhawkconsultancy) · [YouTube @cyberhawkk](https://youtube.com/@cyberhawkk) · [TikTok](https://tiktok.com/@cyberhawkthreatintel) · [X @cyberhawkintel](https://x.com/cyberhawkintel) · [Telegram](https://t.me/cyberhawkthreatintel)
 
 *Authorized security research & penetration testing only. Unauthorized use is illegal.*
 
-`#cyberhawkthreatintel` `#cyberhawkconsultancy` `#cybersecurity` `#claudecode` `#mcp` `#onenote` `#microsoftgraph`
+`#cyberhawkthreatintel` `#cyberhawkconsultancy` `#cyberhawkk` `#cybersecurity` `#ethicalhacking` `#pentesting` `#redteam` `#threatintel` `#infosec` `#claudecode` `#mcp`
 
 </div>
