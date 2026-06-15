@@ -67,12 +67,6 @@ Subsequent pushes do direct PATCH updates via cached page IDs — no searching, 
 ### 1. Install the package
 
 ```bash
-pip install onenote-mcp
-```
-
-Or from source:
-
-```bash
 git clone https://github.com/rudraverma/onenote-mcp.git
 cd onenote-mcp
 pip install -e .
