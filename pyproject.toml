@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "onenote-mcp"
+version = "1.0.0"
+description = "MCP server for bidirectional sync between Claude Code projects and Microsoft OneNote"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+keywords = ["onenote", "mcp", "microsoft-graph", "claude-code", "sync", "cybersecurity"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "mcp>=1.0.0",
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.0",
+    "markdown>=3.7",
+    "html2text>=2024.2.26",
+]
+
+[project.urls]
+Homepage = "https://github.com/rudraverma/onenote-mcp"
+Repository = "https://github.com/rudraverma/onenote-mcp"
+"Bug Tracker" = "https://github.com/rudraverma/onenote-mcp/issues"
+
+[project.scripts]
+onenote-mcp = "onenote_mcp.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+onenote_mcp = ["py.typed"]

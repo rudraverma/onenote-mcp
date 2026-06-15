@@ -1,0 +1,21 @@
+﻿# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Token and per-project config (never commit these)
+onenote_token.json
+onenote_config.json
+
+# OS
+.DS_Store
+Thumbs.db
