@@ -1,14 +1,21 @@
 <div align="center">
-  <img src="https://media.cyberhawkthreatintel.com/general/1771234479938-y9566.png" width="120" alt="CyberHawk Threat Intel"/>
 
-# onenote-mcp
+# **CyberHawk Threat Intel**
+
+<a href="https://www.cyberhawkthreatintel.com">
+  <img src="https://media.cyberhawkthreatintel.com/general/1771234479938-y9566.png" width="140" alt="CyberHawk Threat Intel"/>
+</a>
+
+## onenote-mcp
 
 **Bidirectional sync between Claude Code projects and Microsoft OneNote**
+
+*Built by Rudra Verma | Senior Cyber Security Architect & Researcher | [CyberHawk Threat Intel](https://www.cyberhawkthreatintel.com)*
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![MCP 1.0+](https://img.shields.io/badge/MCP-1.0%2B-purple)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
-[![CyberHawk](https://img.shields.io/badge/by-CyberHawk%20Consultancy-0066cc)](https://cyberhawkthreatintel.com)
+[![CyberHawk Threat Intel](https://img.shields.io/badge/by-CyberHawk%20Threat%20Intel-0066cc)](https://www.cyberhawkthreatintel.com)
 
 *Push your `CLAUDE.md`, `MEMORY.md`, and project docs to OneNote with a single command. Pull them back. No manual copy-paste, no format headaches.*
 
