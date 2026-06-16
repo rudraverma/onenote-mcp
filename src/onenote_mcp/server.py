@@ -290,11 +290,15 @@ async def onenote_sync_project_to_onenote(
         if not files:
             return f"No syncable files found in {project_path}"
 
-        # Push all files concurrently — sequential pushes time out on large file sets
-        results = list(await asyncio.gather(*[
-            client.push_file_to_section(sec["id"], title, content, config)
-            for title, content in files
-        ]))
+        # Semaphore limits to 3 concurrent writes — OneNote throttles (error 30103)
+        # when too many writes hit the same section simultaneously.
+        sem = asyncio.Semaphore(3)
+
+        async def push_one(title: str, content: str) -> dict:
+            async with sem:
+                return await client.push_file_to_section(sec["id"], title, content, config)
+
+        results = list(await asyncio.gather(*[push_one(t, c) for t, c in files]))
 
         config["last_push"] = datetime.datetime.utcnow().isoformat() + "Z"
         _save_config(str(root), config)
