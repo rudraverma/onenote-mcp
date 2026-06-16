@@ -211,18 +211,20 @@ class OneNoteClient:
                     return {} if r.status_code == 204 else r.json()
 
                 if r.status_code in (429, 503):
-                    # Retry-After header takes priority; fall back to exponential backoff.
-                    # Error 30103 = OneNote blocks concurrent writes to the same section —
-                    # needs a longer pause than a generic 429.
-                    retry_after = int(r.headers.get("Retry-After", 0))
-                    if not retry_after:
-                        try:
-                            err_code = r.json().get("error", {}).get("code", "")
-                        except Exception:
-                            err_code = ""
-                        retry_after = 20 if err_code == "30103" else int(2 ** attempt * 2)
+                    retry_after = int(r.headers.get("Retry-After", 0)) or int(2 ** attempt * 2)
                     await asyncio.sleep(retry_after)
                     continue
+
+                if r.status_code == 409:
+                    try:
+                        err_code = r.json().get("error", {}).get("code", "")
+                    except Exception:
+                        err_code = ""
+                    if err_code == "30103":
+                        # OneNote write throttle — fail fast so the per-file error
+                        # handler catches it. Sleeping 30s here would blow the MCP timeout.
+                        raise OneNoteError("30103: OneNote write throttle — run sync again to retry")
+                    raise OneNoteError(f"Graph API {r.status_code}: {r.text[:500]}")
 
                 raise OneNoteError(f"Graph API {r.status_code}: {r.text[:500]}")
 
@@ -318,9 +320,12 @@ class OneNoteClient:
             if r.status_code in (200, 201):
                 return r.json()
             if r.status_code == 409:
-                body = r.json()
-                if "id" in body:
-                    return body
+                # Notebook already exists — list all and find by name.
+                r2 = await c.get(f"{base}/notebooks?$select=id,displayName", headers=hdrs)
+                if r2.status_code == 200:
+                    for nb in r2.json().get("value", []):
+                        if nb.get("displayName") == name:
+                            return nb
             raise OneNoteError(f"Could not get or create notebook '{name}': {r.status_code} {r.text[:300]}")
 
     async def list_sections(self, notebook_id: str) -> list[dict]:
@@ -350,15 +355,16 @@ class OneNoteClient:
             if r.status_code in (200, 201):
                 return r.json()
             if r.status_code == 409:
-                fq = urllib.parse.quote(f"displayName eq '{name}'")
+                # Section already exists — list all sections and find by name.
+                # More reliable than OData $filter which can fail on special chars.
                 r2 = await c.get(
-                    f"{base}/notebooks/{notebook_id}/sections?$filter={fq}",
+                    f"{base}/notebooks/{notebook_id}/sections?$select=id,displayName",
                     headers=hdrs,
                 )
                 if r2.status_code == 200:
-                    hits = r2.json().get("value", [])
-                    if hits:
-                        return hits[0]
+                    for sec in r2.json().get("value", []):
+                        if sec.get("displayName") == name:
+                            return sec
             raise OneNoteError(f"Could not get or create section '{name}': {r.status_code} {r.text[:300]}")
 
     async def list_pages(self, section_id: str) -> list[dict]:

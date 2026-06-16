@@ -7,6 +7,7 @@ import asyncio
 import datetime
 import json
 import os
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -56,25 +57,29 @@ def _project_memory_dir(project_path: str) -> Path:
     return Path.home() / ".claude" / "projects" / slug / "memory"
 
 
-def _collect_project_files(project_path: str) -> list[tuple[str, str]]:
-    """Return (page_title, file_content) for all syncable project files."""
+def _collect_project_files(project_path: str, since: float | None = None) -> list[tuple[str, str]]:
+    """Return (page_title, file_content) for syncable project files.
+    If since is an epoch timestamp, only include files with mtime > since."""
     root  = Path(project_path)
     files = []
     for f in sorted(root.glob("*.md")):
-        files.append((f.name, f.read_text(encoding="utf-8")))
+        if since is None or f.stat().st_mtime > since:
+            files.append((f.name, f.read_text(encoding="utf-8")))
     docs = root / "docs"
     if docs.is_dir():
         for f in sorted(docs.glob("*.md")):
-            files.append((f"docs/{f.name}", f.read_text(encoding="utf-8")))
+            if since is None or f.stat().st_mtime > since:
+                files.append((f"docs/{f.name}", f.read_text(encoding="utf-8")))
     settings = root / ".claude" / "settings.json"
-    if settings.exists():
+    if settings.exists() and (since is None or settings.stat().st_mtime > since):
         content = f"```json\n{settings.read_text(encoding='utf-8')}\n```"
         files.append((".claude/settings.json", content))
     # Memory files — critical for project context recovery
     memory_dir = _project_memory_dir(project_path)
     if memory_dir.is_dir():
         for f in sorted(memory_dir.glob("*.md")):
-            files.append((f"memory/{f.name}", f.read_text(encoding="utf-8")))
+            if since is None or f.stat().st_mtime > since:
+                files.append((f"memory/{f.name}", f.read_text(encoding="utf-8")))
     return files
 
 
@@ -263,9 +268,12 @@ async def onenote_sync_project_to_onenote(
     project_path: str,
     notebook_name: str = "Claude Code Projects",
     section_name: str = "",
+    force: bool = False,
 ) -> str:
     """
-    Push all project files (CLAUDE.md, docs/*.md, .claude/settings.json) to OneNote.
+    Push changed project files (CLAUDE.md, docs/*.md, .claude/settings.json, memory/*.md)
+    to OneNote. On repeated calls only pushes files modified since the last successful sync.
+    Pass force=True to push all files regardless of modification time.
     Creates the notebook and section on first run; reuses cached IDs on subsequent runs.
     Config saved to .claude/onenote_config.json.
     """
@@ -286,29 +294,91 @@ async def onenote_sync_project_to_onenote(
         config["section_id"]    = sec["id"]
         config["section_name"]  = sec["displayName"]
 
-        files = _collect_project_files(str(root))
-        if not files:
-            return f"No syncable files found in {project_path}"
+        file_map = config.get("file_to_page", {})
+        last_push_str = config.get("last_push", "")
 
-        # Semaphore limits to 3 concurrent writes — OneNote throttles (error 30103)
-        # when too many writes hit the same section simultaneously.
-        sem = asyncio.Semaphore(3)
+        if force:
+            # force=True: collect all files regardless of mtime
+            files = _collect_project_files(str(root), since=None)
+        else:
+            # Default: push (a) files modified since last successful sync
+            #          + (b) files never yet pushed (no page_id), regardless of mtime.
+            # This lets the initial sync converge quickly without re-PATCHing everything.
+            since: float | None = None
+            if last_push_str:
+                try:
+                    dt = datetime.datetime.fromisoformat(last_push_str.rstrip("Z"))
+                    since = dt.replace(tzinfo=datetime.timezone.utc).timestamp()
+                except Exception:
+                    since = None
+            changed = _collect_project_files(str(root), since=since)
+            all_files = _collect_project_files(str(root), since=None)
+            never_pushed = [(t, c) for t, c in all_files if t not in file_map]
+            # Merge: never-pushed first, then changed (deduped)
+            seen: set[str] = set()
+            files = []
+            for t, c in (never_pushed + changed):
+                if t not in seen:
+                    seen.add(t)
+                    files.append((t, c))
+
+        if not files:
+            return (
+                f"Nothing to sync — no files changed since last push ({last_push_str})\n"
+                f"Pass force=True to push all files regardless of mtime."
+            )
+
+        # Sort never-pushed files (no page_id) first so they always complete
+        # before the time budget runs out, even when there are many existing pages.
+        files.sort(key=lambda ft: (ft[0] in file_map, ft[0]))
+
+        # 38s hard budget — safely fires before the ~45s MCP transport timeout.
+        # Semaphore(1) fully serializes writes — OneNote returns 30103 on concurrent
+        # writes to the same section.
+        # POSTs (new pages) sleep 0.5s — they trigger 30103 most easily.
+        # PATCHes (updates) sleep 0.1s — less throttle risk, saves ~6s on bulk syncs.
+        deadline = time.monotonic() + 38
+        sem = asyncio.Semaphore(1)
 
         async def push_one(title: str, content: str) -> dict:
             async with sem:
-                return await client.push_file_to_section(sec["id"], title, content, config)
+                if time.monotonic() > deadline:
+                    return {"action": "skipped", "title": title}
+                is_new = title not in file_map
+                await asyncio.sleep(0.5 if is_new else 0.1)
+                try:
+                    return await client.push_file_to_section(sec["id"], title, content, config)
+                except OneNoteError as e:
+                    return {"action": "error", "title": title, "error": str(e)}
 
         results = list(await asyncio.gather(*[push_one(t, c) for t, c in files]))
 
-        config["last_push"] = datetime.datetime.utcnow().isoformat() + "Z"
-        _save_config(str(root), config)
-
         pushed  = sum(1 for r in results if r["action"] == "created")
         updated = sum(1 for r in results if r["action"] == "updated")
+        skipped = [r for r in results if r["action"] == "skipped"]
+        errors  = [r for r in results if r["action"] == "error"]
+
+        # Only advance last_push when everything completed — ensures skipped/failed
+        # files are retried on the next call (their mtime will still be > last_push).
+        if not skipped and not errors:
+            config["last_push"] = datetime.datetime.utcnow().isoformat() + "Z"
+        _save_config(str(root), config)
+
+        lines = [f"  {r['action']:8} {r['title']}" for r in results if r["action"] not in ("error", "skipped")]
+        if errors:
+            lines += [f"  ERROR    {r['title']}: {r.get('error', '')}" for r in errors]
+        if skipped:
+            lines += [f"  SKIPPED  {r['title']} (time budget — run sync again)" for r in skipped]
+
+        summary = f"Sync: {pushed} created, {updated} updated"
+        if errors:
+            summary += f", {len(errors)} failed"
+        if skipped:
+            summary += f", {len(skipped)} skipped — run again to finish"
         return (
-            f"Sync complete: {pushed} created, {updated} updated\n"
+            f"{summary}\n"
             f"Notebook: {notebook_name}  Section: {effective_section}\n\n"
-            + "\n".join(f"  {r['action']:8} {r['title']}" for r in results)
+            + "\n".join(lines)
         )
     except OneNoteError as e:
         return f"ERROR: {e}"
