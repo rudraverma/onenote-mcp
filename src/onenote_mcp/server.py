@@ -48,6 +48,13 @@ def _save_config(project_path: str, config: dict) -> None:
     cfg_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
 
+def _project_memory_dir(project_path: str) -> Path:
+    """Resolve ~/.claude/projects/<slug>/memory/ for the given project path."""
+    import re
+    slug = re.sub(r"[^a-zA-Z0-9-]", "-", project_path)
+    return Path.home() / ".claude" / "projects" / slug / "memory"
+
+
 def _collect_project_files(project_path: str) -> list[tuple[str, str]]:
     """Return (page_title, file_content) for all syncable project files."""
     root  = Path(project_path)
@@ -62,6 +69,11 @@ def _collect_project_files(project_path: str) -> list[tuple[str, str]]:
     if settings.exists():
         content = f"```json\n{settings.read_text(encoding='utf-8')}\n```"
         files.append((".claude/settings.json", content))
+    # Memory files — critical for project context recovery
+    memory_dir = _project_memory_dir(project_path)
+    if memory_dir.is_dir():
+        for f in sorted(memory_dir.glob("*.md")):
+            files.append((f"memory/{f.name}", f.read_text(encoding="utf-8")))
     return files
 
 
