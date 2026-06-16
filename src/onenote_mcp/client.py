@@ -196,19 +196,37 @@ class OneNoteClient:
 
     async def _request(self, method: str, path: str, **kwargs) -> Any:
         token = await self.get_access_token()
-        # Accept both full URLs and /relative paths
         url  = path if path.startswith("https://") else f"{GRAPH_BASE}{path}"
         hdrs = {"Authorization": f"Bearer {token}"}
         if "headers" in kwargs:
             hdrs.update(kwargs.pop("headers"))
+
+        last_status, last_text = 0, ""
         async with httpx.AsyncClient(timeout=60) as c:
-            r = await getattr(c, method)(url, headers=hdrs, **kwargs)
-            if r.status_code == 429:
-                await asyncio.sleep(int(r.headers.get("Retry-After", 10)))
+            for attempt in range(6):
                 r = await getattr(c, method)(url, headers=hdrs, **kwargs)
-            if r.status_code not in (200, 201, 204):
+                last_status, last_text = r.status_code, r.text
+
+                if r.status_code in (200, 201, 204):
+                    return {} if r.status_code == 204 else r.json()
+
+                if r.status_code in (429, 503):
+                    # Retry-After header takes priority; fall back to exponential backoff.
+                    # Error 30103 = OneNote blocks concurrent writes to the same section —
+                    # needs a longer pause than a generic 429.
+                    retry_after = int(r.headers.get("Retry-After", 0))
+                    if not retry_after:
+                        try:
+                            err_code = r.json().get("error", {}).get("code", "")
+                        except Exception:
+                            err_code = ""
+                        retry_after = 20 if err_code == "30103" else int(2 ** attempt * 2)
+                    await asyncio.sleep(retry_after)
+                    continue
+
                 raise OneNoteError(f"Graph API {r.status_code}: {r.text[:500]}")
-            return {} if r.status_code == 204 else r.json()
+
+        raise OneNoteError(f"Graph API {last_status} after 6 attempts: {last_text[:500]}")
 
     async def get(self, path: str) -> Any:
         return await self._request("get", path)
