@@ -3,6 +3,7 @@ OneNote MCP Server — bidirectional sync between Claude Code projects and Micro
 13 tools covering auth, notebooks, sections, pages, and full project push/pull.
 """
 
+import asyncio
 import datetime
 import json
 import os
@@ -289,10 +290,11 @@ async def onenote_sync_project_to_onenote(
         if not files:
             return f"No syncable files found in {project_path}"
 
-        results = []
-        for title, content in files:
-            r = await client.push_file_to_section(sec["id"], title, content, config)
-            results.append(r)
+        # Push all files concurrently — sequential pushes time out on large file sets
+        results = list(await asyncio.gather(*[
+            client.push_file_to_section(sec["id"], title, content, config)
+            for title, content in files
+        ]))
 
         config["last_push"] = datetime.datetime.utcnow().isoformat() + "Z"
         _save_config(str(root), config)
